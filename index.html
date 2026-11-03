@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Pulley</title>
+<meta name="description" content="Pulley — the Flywheel package manager. Browse the packages and users on the Distrobase registry at dstbs.wednesware.org.">
+<meta name="theme-color" content="#08080a">
+<link rel="icon" href="pulley.svg" type="image/svg+xml">
+<script>
+  // The hand-off from polymorphia.dev runs in two stages so it can play sound the whole way:
+  //   1. polymorphia.dev loads this page in a full-screen iframe (#embed=pm), hoists its "$ pulley"
+  //      button up to where this page's search bar is, then tells this page to play its arrival
+  //      (the rope reels in, the wheel rolls into the header, the packages are hoisted in).
+  //      This page reports each step back so polymorphia.dev can play the sound.
+  //   2. Once settled, polymorphia.dev navigates here for real (#from=pm-settled) and this page
+  //      opens straight into that settled state.
+  // #from=pm is the fallback when the iframe could not be used: the arrival plays here, silently.
+  (function () {
+    var h = new URLSearchParams(location.hash.slice(1)), fresh = Math.abs(Date.now() - +h.get("t")) < 4000;
+    var de = document.documentElement;
+    if (h.get("embed") === "pm" && window.parent !== window) {
+      window.__embed = "https://polymorphia.dev";
+      de.classList.add("arrive", "embed-wait");
+    } else if (h.get("from") === "pm-settled" && fresh) {
+      window.__resume = { a: +h.get("a") || 0, snd: h.get("snd") };
+    } else if (h.get("from") === "pm" && fresh) {
+      window.__direct = { snd: h.get("snd") };
+      de.classList.add("arrive");
+    }
+    if (h.get("from") || h.get("embed")) history.replaceState(null, "", location.pathname + location.search);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://dstbs.wednesware.org" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #08080a;
+    --panel: #0e0e12;
+    --panel2: #121217;
+    --fg: #f2f2ee;
+    --dim: #8b8b94;
+    --faint: #4a4a52;
+    --line: #22222a;
+    --line2: #2c2c35;
+    --acc: #d4ff3a;
+    --cyan: #7dd3fc;
+    --violet: #c4b5fd;
+    --amber: #fbbf24;
+    --red: #ff6b6b;
+    --green: #86efac;
+    --pink: #f9a8d4;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --head: 56px;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.55 var(--mono); -webkit-font-smoothing: antialiased;
+    min-height: 100dvh; display: flex; flex-direction: column;
+    font-variant-ligatures: none;   /* keep >= and != literal in version constraints */
+  }
+  ::selection { background: var(--acc); color: var(--bg); }
+  a { color: var(--acc); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
+  button { font: inherit; color: inherit; }
+  kbd { font: inherit; font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; }
+
+  /* ---------- the pulley mark ---------- */
+  .mark { display: block; width: 100%; height: 100%; overflow: visible; }
+  .mark .rim { fill: none; stroke: var(--fg); stroke-width: 9; }
+  .mark .groove { fill: none; stroke: var(--dim); stroke-width: 2.5; }
+  .mark .spoke { stroke: var(--fg); stroke-width: 6; stroke-linecap: round; }
+  .mark .hub { fill: var(--acc); }
+  .mark .axle { fill: var(--bg); }
+
+  /* ---------- arrival / leaving choreography ---------- */
+  /* the wheel and rope that carried over from polymorphia.dev, drawn over everything */
+  #hoist { position: fixed; inset: 0; z-index: 50; pointer-events: none; display: none; }
+  .arrive #hoist, .leaving #hoist { display: block; }
+  .embed-wait #hoist { visibility: hidden; }
+  .embed-wait body { overflow: hidden; }
+  #rope { position: absolute; left: 0; top: 0; width: 2px; background: var(--acc); transform-origin: 50% 0; box-shadow: 0 0 10px rgba(212,255,58,.35); }
+  #wheel { position: absolute; left: 0; top: 0; width: 40px; height: 40px; will-change: transform; }
+  .ui { transition: opacity .6s var(--ease), transform .7s var(--ease); }
+  .arrive .ui { opacity: 0; transform: translateY(10px); }
+  .arrive .ui.in { opacity: 1; transform: none; }
+  .arrive .hz { opacity: 0; transform: translateY(26px); }
+  .arrive .hz.in { opacity: 1; transform: none; transition: opacity .45s var(--ease), transform .6s cubic-bezier(.2, 1.3, .3, 1); }
+  .arrive .bar input::placeholder, .arrive .bar kbd { opacity: 0; }
+  .arrive .bar.in input::placeholder, .arrive .bar.in kbd { opacity: 1; transition: opacity .5s ease; }
+  .leaving .ui, .leaving .hz { transition: opacity .35s ease, transform .45s ease; }
+  .leaving .ui { opacity: 0; transform: translateY(-6px); }
+  .leaving .hz { opacity: 0; transform: translateY(26px); }
+  /* the bar goes back as the plain "$ pulley" button it came from */
+  .leaving .bar input, .leaving .bar input::placeholder, .leaving .bar kbd { color: transparent; opacity: 0; transition: opacity .3s ease, color .3s ease; }
+  .leaving .bar { border-color: var(--line2); }
+
+  /* ---------- header ---------- */
+  header {
+    position: sticky; top: 0; z-index: 20; height: var(--head); flex: none;
+    display: flex; align-items: center; gap: 18px; padding: 0 16px;
+    background: rgba(8, 8, 10, .86); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+    view-transition-name: header;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--fg); font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
+  .brand:hover { text-decoration: none; }
+  .mark-slot { width: 28px; height: 28px; flex: none; position: relative; }
+  .mark-slot .mark { position: absolute; inset: 0; }
+  .brand small { font-weight: 400; font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 1px 8px; }
+  nav.tabs { display: flex; gap: 4px; margin-left: 10px; }
+  nav.tabs a { color: var(--dim); padding: 6px 10px; border-radius: 7px; font-size: 13px; }
+  nav.tabs a:hover { color: var(--fg); text-decoration: none; background: rgba(255,255,255,.04); }
+  nav.tabs a[aria-current="page"] { color: var(--fg); background: rgba(255,255,255,.07); }
+  .head-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px;
+    border: 1px solid var(--line2); border-radius: 8px; background: transparent; cursor: pointer;
+    font-size: 12.5px; color: var(--fg); white-space: nowrap; text-decoration: none;
+  }
+  .btn:hover { border-color: var(--faint); text-decoration: none; background: rgba(255,255,255,.03); }
+  .btn.acc { background: var(--acc); color: var(--bg); border-color: var(--acc); font-weight: 700; }
+  .btn.acc:hover { background: #e2ff70; }
+  .btn.ghost { border-color: transparent; color: var(--dim); }
+  .btn.ghost:hover { color: var(--fg); }
+  .btn.sm { height: 26px; padding: 0 9px; font-size: 11.5px; }
+  #sound[aria-pressed="false"] { color: var(--faint); }
+
+  /* ---------- page ---------- */
+  main { flex: 1; width: 100%; max-width: 1000px; margin: 0 auto; padding: 0 16px 60px; }
+  .hero { padding: 54px 0 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .kicker { margin: 0; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); text-align: center; }
+  .kicker b { color: var(--fg); font-weight: 500; }
+  /* same metrics as polymorphia.dev's "$ pulley" button: it is hoisted into exactly this box */
+  .bar {
+    position: relative; display: flex; align-items: center; gap: 1ch;
+    width: min(680px, 100%); height: 46px; padding: 0 18px;
+    border: 1px solid var(--line2); background: rgba(255,255,255,.015);
+    font-size: 15px; cursor: text; transition: border-color .2s;
+    view-transition-name: bar;
+  }
+  .bar:focus-within { border-color: var(--acc); }
+  .bar .sig { color: var(--acc); }
+  .bar .cmd { color: var(--fg); }
+  .bar input {
+    flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent;
+    font: inherit; color: var(--fg); caret-color: var(--acc); padding: 0;
+  }
+  .bar input::placeholder { color: var(--faint); }
+  .bar input::-webkit-search-cancel-button { display: none; }
+  .stats { margin: 0; font-size: 12px; color: var(--dim); text-align: center; min-height: 1.55em; }
+  .stats b { color: var(--fg); font-weight: 500; }
+  .stats .live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--acc); margin-right: 6px; vertical-align: 1px; box-shadow: 0 0 8px var(--acc); }
+  .stats .live.off { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+  .view { padding-top: 18px; }
+  .view > * { transition: opacity .3s ease, transform .4s var(--ease); }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 10px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); font-weight: 500; }
+  .sec-h .n { color: var(--dim); letter-spacing: 0; }
+  .sec-h .grow { flex: 1; height: 1px; background: var(--line); align-self: center; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 16px;
+    padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    color: var(--fg); position: relative; overflow: hidden;
+    transition: border-color .2s, background .2s, transform .25s var(--ease);
+  }
+  .row::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--acc);
+    transform: scaleY(0); transform-origin: top; transition: transform .3s var(--ease);
+  }
+  .row:hover { text-decoration: none; border-color: var(--line2); background: var(--panel2); transform: translateY(-1px); }
+  .row:hover::before, .row:focus-visible::before { transform: scaleY(1); }
+  .addr { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .addr .au { color: var(--dim); font-weight: 400; }
+  .addr .dot { color: var(--faint); }
+  .desc { grid-column: 1; font-size: 12.5px; color: var(--dim); min-height: 1.55em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color .3s; }
+  .desc.wait { color: var(--faint); }
+  .meta { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+  .ver { color: var(--fg); border: 1px solid var(--line2); border-radius: 999px; padding: 1px 9px; font-size: 12px; }
+  .tag { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; border-radius: 5px; padding: 1px 6px; border: 1px solid var(--line2); color: var(--dim); }
+  .tag.flywheel { color: var(--acc); border-color: rgba(212,255,58,.35); background: rgba(212,255,58,.06); }
+  .tag.hydrogen { color: var(--cyan); border-color: rgba(125,211,252,.3); background: rgba(125,211,252,.05); }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center;
+    font-weight: 700; font-size: 14px; color: var(--bg); background: hsl(var(--h, 75), 85%, 66%);
+  }
+  .row.user { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .row.user .addr, .row.user .desc { grid-column: 2; }
+  .row.user .avatar { grid-row: 1 / span 2; }
+  .row.user .meta { grid-column: 3; }
+  .empty, .note {
+    border: 1px dashed var(--line2); border-radius: 10px; padding: 22px; color: var(--dim); font-size: 13px; text-align: center; line-height: 1.7;
+  }
+  .note { border-style: solid; text-align: left; background: rgba(125, 211, 252, .04); color: #c9d7e2; }
+  .note code, .empty code { color: var(--acc); }
+  .skeleton .addr, .skeleton .desc { color: transparent; background: linear-gradient(90deg, var(--line) 0, #1a1a20 50%, var(--line) 100%) 0 0 / 200% 100%; border-radius: 5px; animation: shimmer 1.4s linear infinite; }
+  .skeleton .addr { width: 40%; } .skeleton .desc { width: 70%; margin-top: 4px; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* ---------- package / user pages ---------- */
+  .crumbs { font-size: 12px; color: var(--dim); margin-bottom: 14px; display: flex; gap: 8px; align-items: center; }
+  .crumbs a { color: var(--dim); } .crumbs a:hover { color: var(--fg); }
+  .title { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 0 0 6px; }
+  .title h1 { margin: 0; font-size: 26px; letter-spacing: -.01em; line-height: 1.25; font-weight: 700; word-break: break-word; }
+  .title h1 .au { color: var(--dim); font-weight: 400; }
+  .lead { margin: 0 0 22px; color: #cfcfd6; font-size: 14px; max-width: 70ch; }
+  .lead.wait { color: var(--faint); }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; align-items: start; }
+  .card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; }
+  .card + .card { margin-top: 14px; }
+  .card-h { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--dim); }
+  .card-h .title-s { color: var(--fg); font-weight: 500; }
+  .card-h .grow { flex: 1; }
+  .card-b { padding: 14px; font-size: 12.5px; }
+  .cmdline {
+    display: flex; align-items: center; gap: 1ch; padding: 0 6px 0 14px; height: 44px;
+    border: 1px solid var(--line2); border-radius: 9px; background: #0a0a0d; margin-bottom: 10px; font-size: 13px;
+  }
+  .cmdline .sig { color: var(--acc); }
+  .cmdline code { flex: 1; min-width: 0; padding: 10px 0; line-height: 1.45; overflow-wrap: anywhere; user-select: all; }
+  .cmdline { height: auto; min-height: 44px; }
+  .cmdline:last-child { margin-bottom: 0; }
+  .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font-size: 12.5px; }
+  .facts dt { color: var(--faint); }
+  .facts dd { margin: 0; color: #d7d7de; overflow-wrap: anywhere; }
+  .rels { list-style: none; margin: 0; padding: 6px; display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
+  .rels a { display: flex; justify-content: space-between; gap: 10px; padding: 6px 9px; border-radius: 7px; color: #cfcfd6; font-size: 12.5px; }
+  .rels a:hover { background: rgba(255,255,255,.04); text-decoration: none; }
+  .rels a[aria-current="true"] { background: rgba(212,255,58,.08); color: var(--acc); }
+  .rels small { color: var(--faint); }
+  .art { display: flex; flex-direction: column; gap: 4px; }
+  .art + .art { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .art .nm { display: flex; justify-content: space-between; gap: 8px; }
+  .art .sha { font-size: 11px; color: var(--faint); overflow-wrap: anywhere; cursor: copy; }
+  .art .sha:hover { color: var(--dim); }
+  .deps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .deps li { display: flex; justify-content: space-between; gap: 10px; }
+  .deps .spec { color: var(--dim); overflow-wrap: anywhere; text-align: right; }
+  .files { margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--dim); columns: 2; }
+
+  .prose { padding: 20px 22px 26px; font-size: 13.5px; line-height: 1.7; overflow-wrap: anywhere; }
+  .prose h1 { font-size: 21px; margin: 0 0 14px; letter-spacing: -.01em; line-height: 1.3; }
+  .prose h2 { font-size: 16px; margin: 28px 0 10px; }
+  .prose h3 { font-size: 14px; margin: 22px 0 8px; color: var(--acc); }
+  .prose p, .prose ul, .prose ol { margin: 0 0 12px; color: #cfcfd6; }
+  .prose li { margin: 3px 0; }
+  .prose code { background: rgba(255,255,255,.06); border-radius: 4px; padding: 1px 5px; font-size: .94em; color: #e9e9ef; }
+  .prose pre { position: relative; margin: 0 0 14px; padding: 12px 14px; background: #0a0a0d; border: 1px solid var(--line); border-radius: 9px; overflow: auto; font-size: 12.5px; line-height: 1.6; }
+  .prose pre code { background: none; padding: 0; color: #d7d7de; }
+  .prose pre .try {
+    position: absolute; top: 7px; right: 7px; height: 24px; padding: 0 9px; font-size: 11px;
+    border: 1px solid var(--line2); border-radius: 6px; background: var(--panel2); color: var(--dim); cursor: pointer; opacity: .7;
+  }
+  .prose pre:hover .try { opacity: 1; } .prose pre .try:hover { color: var(--acc); border-color: var(--acc); }
+  .prose table { border-collapse: collapse; margin: 0 0 14px; font-size: 12.5px; display: block; overflow-x: auto; }
+  .prose th, .prose td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
+  .prose th { color: var(--fg); background: rgba(255,255,255,.03); }
+  .prose blockquote { margin: 0 0 12px; padding: 8px 14px; border-left: 2px solid var(--acc); color: var(--dim); background: rgba(212,255,58,.04); }
+  .prose img { max-width: 100%; }
+  .t-kw { color: var(--violet); } .t-self { color: var(--pink); }
+  .t-ty { color: var(--cyan); } .t-fn { color: #f2f2ee; font-weight: 500; }
+  .t-s { color: var(--green); } .t-esc { color: var(--amber); }
+  .t-interp { color: var(--amber); } .t-n, .t-lit { color: var(--amber); }
+  .t-c { color: var(--faint); font-style: italic; }
+  .t-op { color: #a3a3ad; } .t-p { color: #8b8b94; }
+  .t-tag { color: var(--acc); } .t-tagp { color: #7d8a52; } .t-attr { color: var(--cyan); }
+  .t-spec { color: #e0b65a; font-style: italic; }
+  .t-ns { color: var(--cyan); } .t-err { color: var(--red); text-decoration: underline wavy; }
+
+  .steps { counter-reset: s; display: flex; flex-direction: column; gap: 14px; }
+  .step { counter-increment: s; position: relative; padding-left: 48px; min-width: 0; }
+  .step::before { content: counter(s); position: absolute; left: 0; top: 0; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line2); display: grid; place-items: center; color: var(--acc); font-size: 13px; }
+  .step h3 { margin: 4px 0 2px; font-size: 14px; }
+  .step p { margin: 0 0 8px; color: var(--dim); font-size: 12.5px; }
+  .os-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .os-tabs button { border: 1px solid var(--line2); background: none; color: var(--dim); border-radius: 7px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .os-tabs button[aria-pressed="true"] { color: var(--bg); background: var(--acc); border-color: var(--acc); }
+  table.cmds { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+  table.cmds td:first-child { width: 46%; }
+  table.cmds td { padding: 7px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  table.cmds tr:first-child td { border-top: 0; }
+  table.cmds td:first-child { padding-right: 12px; color: var(--fg); overflow-wrap: anywhere; }
+  table.cmds td:last-child { color: var(--dim); overflow-wrap: anywhere; }
+
+  footer {
+    flex: none; display: flex; flex-wrap: wrap; gap: 6px 2ch; justify-content: center; padding: 18px 16px 26px;
+    font-size: 12px; color: var(--faint); border-top: 1px solid var(--line);
+  }
+  footer a { color: var(--dim); }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); z-index: 60; opacity: 0; pointer-events: none;
+    background: #15151b; border: 1px solid var(--line2); border-radius: 10px; padding: 10px 14px; font-size: 12.5px;
+    box-shadow: 0 20px 60px -20px rgba(0,0,0,.8); transition: opacity .25s, transform .3s var(--ease); max-width: calc(100vw - 32px);
+  }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  #toast code { color: var(--acc); }
+
+  /* ---------- in-site page changes: the old page is lowered, the new one hoisted up ---------- */
+  ::view-transition-old(root) { animation: .26s cubic-bezier(.5, 0, .75, 0) both vt-lower; }
+  ::view-transition-new(root) { animation: .48s cubic-bezier(.2, 1.15, .3, 1) .06s both vt-hoist; }
+  .nav-back::view-transition-old(root) { animation-name: vt-raise; }
+  .nav-back::view-transition-new(root) { animation-name: vt-drop; }
+  ::view-transition-group(addr) { animation-duration: .5s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+  ::view-transition-old(addr), ::view-transition-new(addr) { animation-duration: .5s; height: 100%; object-fit: none; object-position: left center; }
+  @keyframes vt-lower { to { opacity: 0; transform: translateY(18px); } }
+  @keyframes vt-hoist { from { opacity: 0; transform: translateY(34px); } }
+  @keyframes vt-raise { to { opacity: 0; transform: translateY(-14px); } }
+  @keyframes vt-drop { from { opacity: 0; transform: translateY(-24px); } }
+
+  @media (max-width: 760px) {
+    .cols { grid-template-columns: minmax(0, 1fr); }
+    .hide-sm { display: none !important; }
+    nav.tabs { margin-left: 0; }
+    .brand small { display: none; }
+    .hero { padding-top: 34px; }
+    .files { columns: 1; }
+  }
+  @media (max-width: 480px) {
+    header { gap: 10px; }
+    .brand { font-size: 0; gap: 0; }
+    .meta .tag { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(root), ::view-transition-new(root), ::view-transition-group(addr) { animation: none; }
+    .row, .ui { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="hoist" aria-hidden="true"><div id="rope"></div><div id="wheel"></div></div>
+
+<header class="ui">
+  <a class="brand" href="#/" aria-label="Pulley home">
+    <span class="mark-slot" id="markSlot"></span>
+    pulley <small>wednesware.org</small>
+  </a>
+  <nav class="tabs" aria-label="Sections">
+    <a href="#/" data-view="packages">Packages</a>
+    <a href="#/users" data-view="users">Users</a>
+    <a href="#/install" data-view="install">Install</a>
+  </nav>
+  <div class="head-right">
+    <button class="btn ghost" id="sound" type="button" aria-pressed="true" title="Toggle sound effects">♪</button>
+    <a class="btn ghost hide-sm" href="https://github.com/fwlang/pulley" target="_blank" rel="noopener">GitHub ↗</a>
+    <a class="btn ghost hide-sm" id="back" href="https://polymorphia.dev/#main">polymorphia</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="kicker ui">the <b>Flywheel</b> package manager</p>
+    <label class="bar" id="bar">
+      <span class="sig">$</span><span class="cmd">pulley</span>
+      <input id="q" type="search" placeholder="search packages and users" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search packages and users">
+      <kbd class="hide-sm">/</kbd>
+    </label>
+    <p class="stats ui" id="stats" aria-live="polite">&nbsp;</p>
+  </section>
+  <div class="view" id="view"></div>
+</main>
+
+<footer class="ui">
+  <span>packages from <a href="https://dstbs.wednesware.org" target="_blank" rel="noopener">dstbs.wednesware.org</a></span>
+  <span>·</span>
+  <a href="https://github.com/fwlang/pulley" target="_blank" rel="noopener">fwlang/pulley</a>
+  <span>·</span>
+  <a href="https://flywheel.polymorphia.dev">flywheel</a>
+  <span>·</span>
+  <a href="mailto:hello@polymorphia.dev">hello@polymorphia.dev</a>
+</footer>
+<div id="toast" role="status"></div>
+
+<script src="js/highlight.js"></script>
+<script src="js/md.js"></script>
+<script src="js/pkg.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
