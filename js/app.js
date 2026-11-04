@@ -411,7 +411,7 @@ function renderInstall() {
       <div class="steps">
         <div class="step"><h3>Python and pipx</h3><p>pipx gives Pulley its own environment and puts <code>pulley</code> on your PATH.</p>
           <div><div class="os-tabs" role="group" aria-label="Operating system">${["linux", "macos", "windows"].map(o => `<button type="button" data-os="${o}" aria-pressed="${o === os}">${o === "macos" ? "macOS" : o[0].toUpperCase() + o.slice(1)}</button>`).join("")}</div><div id="prep">${PREP[os].map(cmd).join("")}</div></div></div>
-        <div class="step"><h3>Pulley</h3><p>Install it from GitHub. Open a new terminal afterwards.</p>${cmd("pipx install git+https://github.com/fwlang/pulley")}</div>
+        <div class="step"><h3>Pulley</h3><p>Install it from PyPI. Open a new terminal afterwards.</p>${cmd("pipx install fw-pulley")}</div>
         <div class="step"><h3>Check it</h3><p><code>pulley where</code> shows the Flywheel installation and package directories it found.</p>${cmd("pulley --version")}${cmd("pulley where")}</div>
         <div class="step"><h3>Use it</h3><p>Start a project and add a package from this registry by its address.</p>${cmd("pulley new app && cd app")}${cmd("pulley add author.package")}${cmd("flywheel run app.fw")}</div>
       </div>
