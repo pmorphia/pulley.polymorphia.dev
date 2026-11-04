@@ -7,7 +7,8 @@
 <title>Pulley</title>
 <meta name="description" content="Pulley — the Flywheel package manager. Browse the packages and users on the Distrobase registry at dstbs.wednesware.org.">
 <meta name="theme-color" content="#08080a">
-<link rel="icon" href="pulley.svg" type="image/svg+xml">
+<link rel="icon" href="logo.png">
+<link rel="preload" href="logo.png" as="image">
 <script>
   // The hand-off from polymorphia.dev runs in two stages so it can play sound the whole way:
   //   1. polymorphia.dev loads this page in a full-screen iframe (#embed=pm), hoists its "$ pulley"
@@ -74,12 +75,9 @@
   kbd { font: inherit; font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; }
 
   /* ---------- the pulley mark ---------- */
-  .mark { display: block; width: 100%; height: 100%; overflow: visible; }
-  .mark .rim { fill: none; stroke: var(--fg); stroke-width: 9; }
-  .mark .groove { fill: none; stroke: var(--dim); stroke-width: 2.5; }
-  .mark .spoke { stroke: var(--fg); stroke-width: 6; stroke-linecap: round; }
-  .mark .hub { fill: var(--acc); }
-  .mark .axle { fill: var(--bg); }
+  /* the shared polymorphia logo; the PNG has ~10% transparent margin, so it's drawn at 120% to fill
+     the wheel's box edge to edge (the rope hangs from the box's bottom edge) */
+  .mark { position: absolute; left: -10%; top: -10%; width: 120%; height: 120%; max-width: none; display: block; }
 
   /* ---------- arrival / leaving choreography ---------- */
   /* the wheel and rope that carried over from polymorphia.dev, drawn over everything */
@@ -114,7 +112,6 @@
   .brand { display: flex; align-items: center; gap: 10px; color: var(--fg); font-weight: 700; font-size: 17px; letter-spacing: -.01em; }
   .brand:hover { text-decoration: none; }
   .mark-slot { width: 28px; height: 28px; flex: none; position: relative; }
-  .mark-slot .mark { position: absolute; inset: 0; }
   .brand small { font-weight: 400; font-size: 11px; color: var(--dim); border: 1px solid var(--line2); border-radius: 999px; padding: 1px 8px; }
   nav.tabs { display: flex; gap: 4px; margin-left: 10px; }
   nav.tabs a { color: var(--dim); padding: 6px 10px; border-radius: 7px; font-size: 13px; }

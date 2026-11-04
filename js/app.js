@@ -110,25 +110,34 @@ function emit(type, extra) {
 }
 
 /* ================================================================ the pulley mark */
-const MARK = `<svg class="mark" viewBox="0 0 100 100" aria-hidden="true"><circle class="rim" cx="50" cy="50" r="44"/><circle class="groove" cx="50" cy="50" r="33"/><g><line class="spoke" x1="50" y1="50" x2="50" y2="18"/><line class="spoke" x1="50" y1="50" x2="77.7" y2="66"/><line class="spoke" x1="50" y1="50" x2="22.3" y2="66"/></g><circle class="hub" cx="50" cy="50" r="11"/><circle class="axle" cx="50" cy="50" r="3.6"/></svg>`;
+const MARK = `<img class="mark" src="logo.png" alt="" width="2000" height="2000" draggable="false">`;
 const slot = $("#markSlot"), wheelEl = $("#wheel"), rope = $("#rope"), hoist = $("#hoist");
 slot.innerHTML = MARK; wheelEl.innerHTML = MARK;
-const dockSvg = $("svg", slot);
+const dockSvg = $(".mark", slot);
 // The header wheel turns as things move: by the page's scroll (it is the rope) and by a kick on
-// every page change. A ratchet tooth clicks every 30°.
+// every page change. A ratchet tooth clicks every 30° of that movement. On top of it, like the logo
+// on flywheel.polymorphia.dev, it idles round slowly and speeds up while the brand is hovered (that
+// part turns silently: it never clicks the ratchet).
+const IDLE = 14, HOVER = 300;
 let wAngle = resume ? resume.a : 0, wGoal = wAngle, lastTooth = null, arriving = root.classList.contains("arrive");
-function wheelFrame() {
+let omega = IDLE, spun = 0, hoverBrand = false, wLast = performance.now();
+function wheelFrame(now) {
+  const dt = Math.min(.05, (now - wLast) / 1000); wLast = now;
+  omega += ((hoverBrand ? HOVER : IDLE) - omega) * (1 - Math.exp(-dt * (hoverBrand ? 2.2 : .8)));
+  if (!reduced && !arriving) { const d = omega * dt; wAngle += d; wGoal += d; spun += d; }
   wAngle += (wGoal - wAngle) * .14;
   if (Math.abs(wGoal - wAngle) < .01) wAngle = wGoal;
   const a = wAngle + scrollY * .45;
   if (!arriving) {
     dockSvg.style.transform = `rotate(${a % 360}deg)`;
-    const tooth = Math.floor(a / 30);
+    const tooth = Math.floor((a - spun) / 30);
     if (lastTooth !== null && tooth !== lastTooth && !reduced) SFX.click(1 + (tooth % 3) * .04);
     lastTooth = tooth;
   }
   requestAnimationFrame(wheelFrame);
 }
+$(".brand").addEventListener("pointerenter", () => hoverBrand = true);
+$(".brand").addEventListener("pointerleave", () => hoverBrand = false);
 requestAnimationFrame(wheelFrame);
 
 /* ================================================================ registry data */
@@ -546,7 +555,7 @@ function arrive(a0) {
     rowsAt.forEach((at, i) => { if (at !== null && t >= at) { items[i].classList.add("in"); rowsAt[i] = null; if (i < 10) emit("row", { i }); } });
     if (!docked && t >= 1) {
       docked = true; wheelEl.style.display = "none"; dockSvg.style.visibility = "";
-      wAngle = wGoal = angle - scrollY * .45; lastTooth = Math.floor(angle / 30);
+      wAngle = wGoal = angle - scrollY * .45; lastTooth = null;
       dockSvg.style.transform = `rotate(${angle % 360}deg)`;
       emit("docked");
     }
