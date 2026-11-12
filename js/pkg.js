@@ -135,7 +135,13 @@ function value(v) {
 // What a release archive says about itself: a Flywheel package (pulley.toml), a Hydrogen /
 // Sourcegen distribution (.sourcepkg), or neither. README is the first README* at the root.
 async function inspect(buffer) {
-  const files = untar(await gunzip(new Uint8Array(buffer)));
+  let files = untar(await gunzip(new Uint8Array(buffer)));
+  // An archive with a single top-level directory unpacks that directory, as Pulley does.
+  const tops = new Set([...files.keys()].map(n => n.split("/")[0]));
+  if (tops.size === 1 && [...files.keys()].every(n => n.includes("/"))) {
+    const cut = [...tops][0].length + 1;
+    files = new Map([...files].map(([n, d]) => [n.slice(cut), d]));
+  }
   const text = name => files.has(name) ? dec.decode(files.get(name)) : null;
   const meta = { kind: "other", description: "", license: "", main: "", dependencies: [], files: files.size, readme: null, readmeName: null };
   const toml = text("pulley.toml");

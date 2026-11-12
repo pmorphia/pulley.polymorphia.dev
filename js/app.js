@@ -181,7 +181,7 @@ const metaKey = (a, n, v) => `${a}/${n}@${v}`;
 function cachedMeta(a, n, v) {
   const k = metaKey(a, n, v);
   if (metaMem.has(k)) return metaMem.get(k);
-  try { const m = JSON.parse(store.get("pl.meta:" + k, "null")); if (m) { metaMem.set(k, m); return m; } } catch (e) { /* ignore */ }
+  try { const m = JSON.parse(store.get("pl.meta.v2:" + k, "null")); if (m) { metaMem.set(k, m); return m; } } catch (e) { /* ignore */ }
   return null;
 }
 function getMeta(a, n, v) {
@@ -202,7 +202,7 @@ function getMeta(a, n, v) {
     meta.artifacts = artifacts;
     if (meta.readme && meta.readme.length > 120000) meta.readme = meta.readme.slice(0, 120000) + "\n\n…";
     metaMem.set(k, meta);
-    store.set("pl.meta:" + k, JSON.stringify(meta));
+    store.set("pl.meta.v2:" + k, JSON.stringify(meta));
     return meta;
   })();
   metaWait.set(k, p);
@@ -272,9 +272,11 @@ function ago(iso) {
 }
 const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }); };
 const fmtSize = n => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB";
-const kindTag = k => k === "flywheel" ? `<span class="tag flywheel" title="has a pulley.toml">flywheel</span>` : k === "hydrogen" ? `<span class="tag hydrogen" title="a Hydrogen / Sourcegen distribution">hydrogen</span>` : `<span class="tag">package</span>`;
+const kindTag = k => k === "flywheel" ? `<span class="tag flywheel" title="has a pulley.toml">flywheel</span>` : `<span class="tag">package</span>`;
 const addrHtml = (a, n) => `<span class="au">${esc(a)}</span><span class="dot">.</span>${esc(n)}`;
-const installCmd = (a, n, kind) => kind === "hydrogen" ? `h2 get ${a}.${n} && h2 install ${a}.${n}` : `pulley add ${a}.${n}`;
+const installCmd = (a, n) => `pulley add ${a}.${n}`;
+// a distribution whose release was read and has no pulley.toml: not shown, and Pulley refuses it
+const foreign = m => !!m && m.kind !== "flywheel" && !m.unreadable;
 
 function pkgRow(d) {
   const m = cachedMeta(d.author, d.name, d.latest), key = d.author + "/" + d.name;
@@ -333,6 +335,14 @@ function renderPackage(a, n, v) {
   const d = DB && DB.dists.find(x => x.author === a && x.name === n);
   const want = v || (d && d.latest) || null;
   const m0 = want ? cachedMeta(a, n, want) : null;
+  // Only Flywheel packages have a page: anything else gets this notice and nothing of its contents.
+  const notFlywheel = cls => {
+    view.innerHTML = `
+    <nav class="crumbs ${cls}"><a href="#/">packages</a><span>/</span><span>${esc(a)}</span><span>/</span><span>${esc(n)}</span></nav>
+    <div class="title ${cls}"><h1>${addrHtml(a, n)}</h1></div>
+    <div class="empty ${cls}"><code>${esc(a)}.${esc(n)}</code> isn't a Flywheel package: its release has no <code>pulley.toml</code>. This site lists Flywheel packages only, and Pulley installs Flywheel packages only.<br><a class="btn sm" href="#/" style="margin-top:12px">Browse Flywheel packages</a></div>`;
+  };
+  if (foreign(m0)) return notFlywheel("hz");
   view.innerHTML = `
     <nav class="crumbs hz"><a href="#/">packages</a><span>/</span><a href="#/u/${enc(a)}">${esc(a)}</a><span>/</span><span>${esc(n)}</span></nav>
     <div class="title hz"><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><span id="pTag">${m0 ? kindTag(m0.kind) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div>
@@ -352,20 +362,19 @@ function renderPackage(a, n, v) {
     </div>`;
   const here = location.hash;
   const still = () => location.hash === here;
-  const fillInstall = kind => {
-    if (kind && kind !== "flywheel") { $("#pInstall").innerHTML = `<p style="margin:0;color:var(--faint);font-size:11.5px">Pulley installs Flywheel packages only.</p>`; return; }
-    const cmd = installCmd(a, n, kind);
+  const fillInstall = m => {
+    // an archive that couldn't be read can't be vouched for, so no install command for it
+    if (m && m.kind !== "flywheel") { $("#pInstall").innerHTML = `<p style="margin:0;color:var(--faint);font-size:11.5px">Pulley installs Flywheel packages only, and this release couldn't be read.</p>`; return; }
+    const cmd = installCmd(a, n);
     $("#pInstall").innerHTML = `<div class="cmdline"><span class="sig">$</span><code>${esc(cmd)}</code><button class="btn sm ghost" type="button" data-copy="${esc(cmd)}">copy</button></div>` +
       `<p style="margin:8px 0 0;color:var(--faint);font-size:11.5px">New to Pulley? <a href="#/install">Install it</a>.</p>`;
   };
-  fillInstall(m0 && m0.kind);
+  fillInstall(m0);
   const facts = (rels, m) => {
     const rows = [["address", `${a}.${n}`], ["registry", REGISTRY], ["author", `<a href="#/u/${enc(a)}">${esc(a)}</a>`, true]];
     if (rels) rows.push(["latest", rels.latest]);
     if (m && m.license) rows.push(["license", m.license]);
     if (m && m.main) rows.push(["main", m.main]);
-    if (m && m.command) rows.push(["command", m.command]);
-    if (m && m.requiresPython) rows.push(["python", m.requiresPython]);
     $("#pFacts").innerHTML = rows.map(([k, v, raw]) => `<dt>${k}</dt><dd>${raw ? v : esc(v)}</dd>`).join("");
   };
   facts(null, m0);
@@ -379,12 +388,12 @@ function renderPackage(a, n, v) {
     facts(rels, cachedMeta(a, n, ver));
     return getMeta(a, n, ver).then(m => {
       if (!still()) return;
+      if (foreign(m)) return notFlywheel("hz in");
       facts(rels, m);
       $("#pTag").innerHTML = kindTag(m.kind);
-      const foreign = m.kind !== "flywheel" && !m.unreadable;
-      $("#pLead").textContent = foreign ? "This isn't a Flywheel package (its release has no pulley.toml), so it isn't listed here." : m.description || (m.unreadable ? "This release's archive couldn't be read." : "No description.");
-      $("#pLead").classList.toggle("wait", foreign || !m.description);
-      fillInstall(m.kind);
+      $("#pLead").textContent = m.description || (m.unreadable ? "This release's archive couldn't be read." : "No description.");
+      $("#pLead").classList.toggle("wait", !m.description);
+      fillInstall(m);
       $("#pArts").innerHTML = m.artifacts.length ? m.artifacts.map(x => `<div class="art"><div class="nm"><a href="${esc(artifactUrl(a, n, ver, x.name))}" download>${esc(x.name)}</a><span style="color:var(--dim)">${fmtSize(x.size)}</span></div><span class="sha" data-copy="${esc(x.sha256)}" title="copy SHA-256">sha256 ${esc(x.sha256)}</span></div>`).join("") : "none";
       paintReadme(m);
       if (m.fileList && m.fileList.length) { $("#pFilesCard").hidden = false; $("#pFilesN").textContent = m.fileList.length; $("#pFiles").innerHTML = m.fileList.slice(0, 200).map(f => `<li>${esc(f)}</li>`).join(""); }
