@@ -1,10 +1,10 @@
 # pulley.polymorphia.dev
 
-The website of [Pulley](https://github.com/fwlang/pulley), the Flywheel package manager. It lists the packages and users of the [Distrobase](https://github.com/Wednesware/Distrobase) registry at `dstbs.wednesware.org`, which Pulley and [Hydrogen](https://github.com/Wednesware/Hydrogen) use.
+The website of [Pulley](https://github.com/fwlang/pulley), the Flywheel package manager. It lists the Flywheel packages and the users of the [Distrobase](https://github.com/Wednesware/Distrobase) registry at `dstbs.wednesware.org`, which Pulley and [Hydrogen](https://github.com/Wednesware/Hydrogen) use.
 
 It is a static site with no build step, served by GitHub Pages.
 
-- **Packages:** every distribution with its latest version and release count. The description and kind come from the release archive itself: `pulley.toml` for Flywheel packages, `.sourcepkg` for Hydrogen distributions.
+- **Packages:** every Flywheel package with its latest version and release count. A distribution is a Flywheel package when its latest release has a `pulley.toml`; the site reads each release archive to tell (showing "checking" meanwhile) and leaves out everything else, such as Hydrogen distributions with a `.sourcepkg`. The description comes from the `pulley.toml`. A package page opened directly for another kind of distribution says it isn't a Flywheel package.
 - **Package pages:** the README (Markdown, with Flywheel highlighting and "Try it" links to the [playground](https://flywheel.polymorphia.dev)), the install command, releases, artifacts with SHA-256 checksums, dependencies and files.
 - **Users:** registered users, with their join dates and packages.
 - **Install:** how to install Pulley.

@@ -219,16 +219,35 @@ async function getReleases(a, n) {
   releasesMem.set(k, out);
   return out;
 }
+// Only Flywheel packages (releases with a pulley.toml) are shown. A package's kind is known once
+// its latest release has been read; until then it is "checking", and unreadable ones are hidden.
+const metaFailed = new Set();
+const kindOf = d => { const m = cachedMeta(d.author, d.name, d.latest); return m ? m.kind : metaFailed.has(metaKey(d.author, d.name, d.latest)) ? "unreadable" : null; };
+const flywheelDists = list => list.filter(d => kindOf(d) === "flywheel");
+const checkingDists = list => list.filter(d => kindOf(d) === null);
+let refreshQueued = false;
+function refreshView() {
+  if (refreshQueued) return;
+  refreshQueued = true;
+  requestAnimationFrame(() => {
+    refreshQueued = false;
+    if (current.name === "packages" || current.name === "users") renderList(current.name);
+    else if (current.name === "user") renderUser(current.user);
+    else return;
+    renderStats();
+    $$(".hz").forEach(el => el.classList.add("in"));
+  });
+}
 // list descriptions: read the latest release of each listed package, three at a time
 const metaQueue = []; let metaBusy = 0;
 function wantMeta(d) {
-  if (cachedMeta(d.author, d.name, d.latest) || metaQueue.some(x => x === d)) return;
+  if (cachedMeta(d.author, d.name, d.latest) || metaFailed.has(metaKey(d.author, d.name, d.latest)) || metaQueue.some(x => x === d)) return;
   metaQueue.push(d); pumpMeta();
 }
 function pumpMeta() {
   while (metaBusy < 3 && metaQueue.length) {
     const d = metaQueue.shift(); metaBusy++;
-    getMeta(d.author, d.name, d.latest).then(m => fillRow(d, m), () => fillRow(d, null)).finally(() => { metaBusy--; pumpMeta(); });
+    getMeta(d.author, d.name, d.latest).then(m => { fillRow(d, m); refreshView(); }, () => { metaFailed.add(metaKey(d.author, d.name, d.latest)); refreshView(); }).finally(() => { metaBusy--; pumpMeta(); });
   }
 }
 function fillRow(d, m) {
@@ -266,7 +285,7 @@ function pkgRow(d) {
   </a>`;
 }
 function userRow(u) {
-  const n = DB.dists.filter(d => d.author === u.name.toLowerCase()).length;
+  const n = flywheelDists(DB.dists.filter(d => d.author === u.name.toLowerCase())).length;
   return `<a class="row user hz" href="#/u/${enc(u.name)}" data-key="u:${esc(u.name)}">
     <span class="avatar" style="--h:${hue(u.name)}">${esc(u.name[0].toUpperCase())}</span>
     <span class="addr" data-addr="u:${esc(u.name)}">${esc(u.name)}</span>
@@ -274,6 +293,7 @@ function userRow(u) {
     <span class="desc">${u.joined ? "joined " + esc(ago(u.joined)) : "join date unknown"}</span>
   </a>`;
 }
+const checkingNote = n => n ? `<div class="note hz" style="margin-top:8px">Checking ${plural(n, "more package")} for a <code>pulley.toml</code>…</div>` : "";
 const secH = (label, n) => `<h2 class="sec-h hz">${label} <span class="n">${n}</span><span class="grow"></span></h2>`;
 const skeleton = n => `<div class="list">${Array.from({ length: n }, () => `<div class="row skeleton hz"><span class="addr">.</span><span class="desc">.</span></div>`).join("")}</div>`;
 function errorNote() {
@@ -292,19 +312,21 @@ function renderList(kind) {
   if (!DB) { view.innerHTML = loadError ? errorNote() : secH(kind, "…") + skeleton(4); return; }
   const text = q.value.trim().toLowerCase();
   const match = s => !text || s.toLowerCase().includes(text);
-  const dists = DB.dists.filter(d => match(d.author + "." + d.name) || match((cachedMeta(d.author, d.name, d.latest) || {}).description || ""));
+  const matching = DB.dists.filter(d => match(d.author + "." + d.name) || match((cachedMeta(d.author, d.name, d.latest) || {}).description || ""));
+  const dists = flywheelDists(matching), checking = checkingDists(matching);
   const users = DB.users.filter(u => match(u.name));
   let html = loadError ? errorNote() : "";
   const pk = () => {
     if (listMissing) return secH("packages", "—") + missingNote() + (text ? `<div class="list" style="margin-top:8px">${lookupRow(text)}</div>` : "");
-    if (!dists.length) return secH("packages", 0) + `<div class="empty hz">${text ? `No packages match <code>${esc(text)}</code>.` : "No packages have been published yet."}${text ? `<div class="list" style="margin-top:12px;text-align:left">${lookupRow(text)}</div>` : ""}</div>`;
-    return secH("packages", dists.length) + `<div class="list">${dists.map(pkgRow).join("")}</div>`;
+    if (!dists.length && checking.length) return secH("packages", "…") + skeleton(Math.min(checking.length, 4)) + checkingNote(checking.length);
+    if (!dists.length) return secH("packages", 0) + `<div class="empty hz">${text ? `No Flywheel packages match <code>${esc(text)}</code>.` : "No Flywheel packages have been published yet."}${text ? `<div class="list" style="margin-top:12px;text-align:left">${lookupRow(text)}</div>` : ""}</div>`;
+    return secH("packages", dists.length) + `<div class="list">${dists.map(pkgRow).join("")}</div>` + checkingNote(checking.length);
   };
   const us = () => !users.length ? secH("users", 0) + `<div class="empty hz">${text ? `No users match <code>${esc(text)}</code>.` : "No users yet."}</div>` : secH("users", users.length) + `<div class="list">${users.map(userRow).join("")}</div>`;
   if (text) html += pk() + us();             // searching shows both
   else html += kind === "users" ? us() : pk();
   view.innerHTML = html;
-  dists.forEach(wantMeta);
+  checking.forEach(wantMeta);
 }
 
 function renderPackage(a, n, v) {
@@ -331,10 +353,10 @@ function renderPackage(a, n, v) {
   const here = location.hash;
   const still = () => location.hash === here;
   const fillInstall = kind => {
+    if (kind && kind !== "flywheel") { $("#pInstall").innerHTML = `<p style="margin:0;color:var(--faint);font-size:11.5px">Pulley installs Flywheel packages only.</p>`; return; }
     const cmd = installCmd(a, n, kind);
     $("#pInstall").innerHTML = `<div class="cmdline"><span class="sig">$</span><code>${esc(cmd)}</code><button class="btn sm ghost" type="button" data-copy="${esc(cmd)}">copy</button></div>` +
-      (kind === "hydrogen" ? `<p style="margin:8px 0 0;color:var(--faint);font-size:11.5px">A Hydrogen distribution: install Hydrogen with <code>pipx install wwh</code>.</p>` :
-        `<p style="margin:8px 0 0;color:var(--faint);font-size:11.5px">New to Pulley? <a href="#/install">Install it</a>.</p>`);
+      `<p style="margin:8px 0 0;color:var(--faint);font-size:11.5px">New to Pulley? <a href="#/install">Install it</a>.</p>`;
   };
   fillInstall(m0 && m0.kind);
   const facts = (rels, m) => {
@@ -359,8 +381,9 @@ function renderPackage(a, n, v) {
       if (!still()) return;
       facts(rels, m);
       $("#pTag").innerHTML = kindTag(m.kind);
-      $("#pLead").textContent = m.description || (m.unreadable ? "This release's archive couldn't be read." : "No description.");
-      $("#pLead").classList.toggle("wait", !m.description);
+      const foreign = m.kind !== "flywheel" && !m.unreadable;
+      $("#pLead").textContent = foreign ? "This isn't a Flywheel package (its release has no pulley.toml), so it isn't listed here." : m.description || (m.unreadable ? "This release's archive couldn't be read." : "No description.");
+      $("#pLead").classList.toggle("wait", foreign || !m.description);
       fillInstall(m.kind);
       $("#pArts").innerHTML = m.artifacts.length ? m.artifacts.map(x => `<div class="art"><div class="nm"><a href="${esc(artifactUrl(a, n, ver, x.name))}" download>${esc(x.name)}</a><span style="color:var(--dim)">${fmtSize(x.size)}</span></div><span class="sha" data-copy="${esc(x.sha256)}" title="copy SHA-256">sha256 ${esc(x.sha256)}</span></div>`).join("") : "none";
       paintReadme(m);
@@ -387,13 +410,14 @@ const b64e = s => btoa(String.fromCharCode(...new TextEncoder().encode(s))).repl
 
 function renderUser(name) {
   const u = DB && DB.users.find(x => x.name.toLowerCase() === name.toLowerCase());
-  const dists = DB ? DB.dists.filter(d => d.author === name.toLowerCase()) : [];
+  const own = DB ? DB.dists.filter(d => d.author === name.toLowerCase()) : [];
+  const dists = flywheelDists(own), checking = checkingDists(own);
   view.innerHTML = `
     <nav class="crumbs hz"><a href="#/users">users</a><span>/</span><span>${esc(name)}</span></nav>
     <div class="title hz"><span class="avatar" style="--h:${hue(name)};width:42px;height:42px;font-size:19px;border-radius:11px">${esc(name[0].toUpperCase())}</span><h1 data-addr="u:${esc(name)}">${esc(name)}</h1></div>
     <p class="lead hz">${!DB ? "loading…" : u ? (u.joined ? `Joined ${esc(fmtDate(u.joined))} (${esc(ago(u.joined))}).` : "Join date unknown.") : `No user called <code>${esc(name)}</code> on ${REGISTRY}.`}</p>
-    ${!DB ? "" : listMissing ? missingNote() : secH("packages", dists.length) + (dists.length ? `<div class="list">${dists.map(pkgRow).join("")}</div>` : `<div class="empty hz">${esc(name)} hasn't published anything yet.</div>`)}`;
-  dists.forEach(wantMeta);
+    ${!DB ? "" : listMissing ? missingNote() : secH("packages", dists.length) + (dists.length ? `<div class="list">${dists.map(pkgRow).join("")}</div>` : checking.length ? "" : `<div class="empty hz">${esc(name)} hasn't published any Flywheel packages yet.</div>`) + checkingNote(checking.length)}`;
+  checking.forEach(wantMeta);
 }
 
 function renderInstall() {
@@ -437,8 +461,9 @@ shapes = "author.shapes=^1.2"</code></pre><p style="margin:0;font-size:12px;colo
 
 function renderStats() {
   if (!DB) { stats.innerHTML = loadError ? `<span class="live off"></span>registry unreachable` : `<span class="live"></span>reading dstbs.wednesware.org…`; return; }
-  const rel = DB.dists.reduce((s, d) => s + d.releases, 0);
-  const bits = listMissing ? [`<b>${DB.users.length}</b> ${DB.users.length === 1 ? "user" : "users"}`] : [`<b>${DB.dists.length}</b> ${DB.dists.length === 1 ? "package" : "packages"}`, `<b>${DB.users.length}</b> ${DB.users.length === 1 ? "user" : "users"}`, `<b>${rel}</b> ${rel === 1 ? "release" : "releases"}`];
+  const fw = flywheelDists(DB.dists);
+  const rel = fw.reduce((s, d) => s + d.releases, 0);
+  const bits = listMissing ? [`<b>${DB.users.length}</b> ${DB.users.length === 1 ? "user" : "users"}`] : [`<b>${fw.length}</b> Flywheel ${fw.length === 1 ? "package" : "packages"}`, `<b>${DB.users.length}</b> ${DB.users.length === 1 ? "user" : "users"}`, `<b>${rel}</b> ${rel === 1 ? "release" : "releases"}`];
   stats.innerHTML = `<span class="live${live ? "" : " off"}"></span>${bits.join(" · ")} · ${live ? "live from" : "cached from"} dstbs.wednesware.org`;
 }
 
