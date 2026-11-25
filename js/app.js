@@ -355,7 +355,7 @@ function renderPackage(a, n, v) {
   if (foreign(m0)) return notFlywheel("hz");
   view.innerHTML = `
     <nav class="crumbs hz"><a href="#/">packages</a><span>/</span><a href="#/u/${enc(a)}">${esc(a)}</a><span>/</span><span>${esc(n)}</span></nav>
-    <div class="title hz"><span id="pIcon">${pkgIcon(m0, n, "lg")}</span><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><span id="pTag">${m0 ? kindTag(m0.kind) + unlistedTag(m0) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div>
+    <div class="title pkg-title hz"><span id="pIcon">${pkgIcon(m0, n, "lg")}</span><div class="pt-b"><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><div class="pt-m"><span id="pTag">${m0 ? kindTag(m0.kind) + unlistedTag(m0) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div></div></div>
     <p class="lead hz${m0 ? "" : " wait"}" id="pLead">${m0 ? esc(m0.description || "No description.") : "reading the release…"}</p>
     <div class="cols hz">
       <div>

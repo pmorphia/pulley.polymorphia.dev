@@ -256,7 +256,11 @@
   .picon { width: 30px; height: 30px; border-radius: 8px; flex: none; object-fit: cover; background: var(--panel2); }
   .picon.none { display: grid; place-items: center; border: 1px solid var(--line2); color: var(--faint); font-size: 13px; font-weight: 600; }
   .deps .picon { width: 26px; height: 26px; border-radius: 7px; font-size: 12px; }
-  .picon.lg { width: 42px; height: 42px; border-radius: 11px; font-size: 18px; }
+  .picon.lg { width: 104px; height: 104px; border-radius: 24px; font-size: 44px; }
+  .pkg-title { flex-wrap: nowrap; gap: 22px; margin-bottom: 14px; }
+  .pt-b { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .pkg-title h1 { font-size: 44px; line-height: 1.1; letter-spacing: -.02em; }
+  .pt-m { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
   #pIcon { display: contents; }
   .row.pkg { grid-template-columns: auto minmax(0, 1fr) auto; }
   .row.pkg .addr, .row.pkg .desc { grid-column: 2; }
@@ -341,11 +345,17 @@
     .brand small { display: none; }
     .hero { padding-top: 34px; }
     .files { columns: 1; }
+    .picon.lg { width: 76px; height: 76px; border-radius: 18px; font-size: 32px; }
+    .pkg-title { gap: 16px; }
+    .pkg-title h1 { font-size: 32px; }
   }
   @media (max-width: 480px) {
     header { gap: 10px; }
     .brand { font-size: 0; gap: 0; }
     .meta .tag { display: none; }
+    .picon.lg { width: 60px; height: 60px; border-radius: 15px; font-size: 26px; }
+    .pkg-title { gap: 14px; }
+    .pkg-title h1 { font-size: 25px; }
   }
   @media (prefers-reduced-motion: reduce) {
     ::view-transition-old(root), ::view-transition-new(root), ::view-transition-group(addr) { animation: none; }
