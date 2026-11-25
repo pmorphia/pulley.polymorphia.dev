@@ -153,6 +153,7 @@ async function inspect(buffer) {
       meta.license = String(p.license || "");
       meta.main = String(p.main || "");
       meta.version = p.version ? String(p.version) : "";
+      meta.unlisted = p.unlisted === true; // `unlisted = true`: left out of listings, page still opens by address
       const deps = (o, dev) => Object.entries(o || {}).map(([alias, spec]) => ({ alias, spec: typeof spec === "string" ? spec : describeSpec(spec), dev }));
       meta.dependencies = deps(t.dependencies, false).concat(deps(t["dev-dependencies"], true));
     } catch (e) { /* show what we can */ }

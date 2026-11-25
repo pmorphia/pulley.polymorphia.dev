@@ -181,7 +181,7 @@ const metaKey = (a, n, v) => `${a}/${n}@${v}`;
 function cachedMeta(a, n, v) {
   const k = metaKey(a, n, v);
   if (metaMem.has(k)) return metaMem.get(k);
-  try { const m = JSON.parse(store.get("pl.meta.v2:" + k, "null")); if (m) { metaMem.set(k, m); return m; } } catch (e) { /* ignore */ }
+  try { const m = JSON.parse(store.get("pl.meta.v3:" + k, "null")); if (m) { metaMem.set(k, m); return m; } } catch (e) { /* ignore */ }
   return null;
 }
 function getMeta(a, n, v) {
@@ -202,7 +202,7 @@ function getMeta(a, n, v) {
     meta.artifacts = artifacts;
     if (meta.readme && meta.readme.length > 120000) meta.readme = meta.readme.slice(0, 120000) + "\n\n…";
     metaMem.set(k, meta);
-    store.set("pl.meta.v2:" + k, JSON.stringify(meta));
+    store.set("pl.meta.v3:" + k, JSON.stringify(meta));
     return meta;
   })();
   metaWait.set(k, p);
@@ -223,7 +223,10 @@ async function getReleases(a, n) {
 // its latest release has been read; until then it is "checking", and unreadable ones are hidden.
 const metaFailed = new Set();
 const kindOf = d => { const m = cachedMeta(d.author, d.name, d.latest); return m ? m.kind : metaFailed.has(metaKey(d.author, d.name, d.latest)) ? "unreadable" : null; };
-const flywheelDists = list => list.filter(d => kindOf(d) === "flywheel");
+// `unlisted = true` in a package's latest pulley.toml keeps it out of every listing (packages,
+// search, user pages, counts); its page still opens from a direct link or a typed address.
+const isUnlisted = d => !!(cachedMeta(d.author, d.name, d.latest) || {}).unlisted;
+const flywheelDists = list => list.filter(d => kindOf(d) === "flywheel" && !isUnlisted(d));
 const checkingDists = list => list.filter(d => kindOf(d) === null);
 let refreshQueued = false;
 function refreshView() {
@@ -273,6 +276,7 @@ function ago(iso) {
 const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" }); };
 const fmtSize = n => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB";
 const kindTag = k => k === "flywheel" ? `<span class="tag flywheel" title="has a pulley.toml">flywheel</span>` : `<span class="tag">package</span>`;
+const unlistedTag = m => m && m.unlisted ? ` <span class="tag" title="unlisted = true in pulley.toml: not shown in listings">unlisted</span>` : "";
 const addrHtml = (a, n) => `<span class="au">${esc(a)}</span><span class="dot">.</span>${esc(n)}`;
 const installCmd = (a, n) => `pulley add ${a}.${n}`;
 // a distribution whose release was read and has no pulley.toml: not shown, and Pulley refuses it
@@ -345,7 +349,7 @@ function renderPackage(a, n, v) {
   if (foreign(m0)) return notFlywheel("hz");
   view.innerHTML = `
     <nav class="crumbs hz"><a href="#/">packages</a><span>/</span><a href="#/u/${enc(a)}">${esc(a)}</a><span>/</span><span>${esc(n)}</span></nav>
-    <div class="title hz"><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><span id="pTag">${m0 ? kindTag(m0.kind) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div>
+    <div class="title hz"><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><span id="pTag">${m0 ? kindTag(m0.kind) + unlistedTag(m0) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div>
     <p class="lead hz${m0 ? "" : " wait"}" id="pLead">${m0 ? esc(m0.description || "No description.") : "reading the release…"}</p>
     <div class="cols hz">
       <div>
@@ -390,7 +394,7 @@ function renderPackage(a, n, v) {
       if (!still()) return;
       if (foreign(m)) return notFlywheel("hz in");
       facts(rels, m);
-      $("#pTag").innerHTML = kindTag(m.kind);
+      $("#pTag").innerHTML = kindTag(m.kind) + unlistedTag(m);
       $("#pLead").textContent = m.description || (m.unreadable ? "This release's archive couldn't be read." : "No description.");
       $("#pLead").classList.toggle("wait", !m.description);
       fillInstall(m);
