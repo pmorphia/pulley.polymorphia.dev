@@ -181,7 +181,7 @@ const metaKey = (a, n, v) => `${a}/${n}@${v}`;
 function cachedMeta(a, n, v) {
   const k = metaKey(a, n, v);
   if (metaMem.has(k)) return metaMem.get(k);
-  try { const m = JSON.parse(store.get("pl.meta.v3:" + k, "null")); if (m) { metaMem.set(k, m); return m; } } catch (e) { /* ignore */ }
+  try { const m = JSON.parse(store.get("pl.meta.v4:" + k, "null")); if (m) { metaMem.set(k, m); return m; } } catch (e) { /* ignore */ }
   return null;
 }
 function getMeta(a, n, v) {
@@ -202,7 +202,7 @@ function getMeta(a, n, v) {
     meta.artifacts = artifacts;
     if (meta.readme && meta.readme.length > 120000) meta.readme = meta.readme.slice(0, 120000) + "\n\n…";
     metaMem.set(k, meta);
-    store.set("pl.meta.v3:" + k, JSON.stringify(meta));
+    store.set("pl.meta.v4:" + k, JSON.stringify(meta));
     return meta;
   })();
   metaWait.set(k, p);
@@ -258,6 +258,7 @@ function fillRow(d, m) {
     const desc = $(".desc", row); desc.classList.remove("wait");
     desc.textContent = m ? (m.description || (m.kind === "flywheel" ? "a Flywheel package" : "no description")) : "couldn't read this release";
     const t = $(".tag", row); if (t && m) t.outerHTML = kindTag(m.kind);
+    const i = $(".picon", row); if (i && m) i.outerHTML = pkgIcon(m, d.name);
   });
 }
 
@@ -277,6 +278,10 @@ const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? "" : d.toLoc
 const fmtSize = n => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(1) + " KB" : (n / 1048576).toFixed(1) + " MB";
 const kindTag = k => k === "flywheel" ? `<span class="tag flywheel" title="has a pulley.toml">flywheel</span>` : `<span class="tag">package</span>`;
 const unlistedTag = m => m && m.unlisted ? ` <span class="tag" title="unlisted = true in pulley.toml: not shown in listings">unlisted</span>` : "";
+// `[package] icon` (a data: URL read from the release), or a quiet tile with the name's initial
+const pkgIcon = (m, name, cls = "") => m && m.icon
+  ? `<img class="picon ${cls}" src="${esc(m.icon)}" alt="" loading="lazy" decoding="async">`
+  : `<span class="picon none ${cls}" aria-hidden="true">${esc((name || "?")[0].toUpperCase())}</span>`;
 const addrHtml = (a, n) => `<span class="au">${esc(a)}</span><span class="dot">.</span>${esc(n)}`;
 const installCmd = (a, n) => `pulley add ${a}.${n}`;
 // a distribution whose release was read and has no pulley.toml: not shown, and Pulley refuses it
@@ -284,7 +289,8 @@ const foreign = m => !!m && m.kind !== "flywheel" && !m.unreadable;
 
 function pkgRow(d) {
   const m = cachedMeta(d.author, d.name, d.latest), key = d.author + "/" + d.name;
-  return `<a class="row hz" href="#/p/${enc(d.author)}/${enc(d.name)}" data-key="${esc(key)}">
+  return `<a class="row pkg hz" href="#/p/${enc(d.author)}/${enc(d.name)}" data-key="${esc(key)}">
+    ${pkgIcon(m, d.name)}
     <span class="addr" data-addr="${esc(key)}">${addrHtml(d.author, d.name)}</span>
     <span class="meta">${m ? kindTag(m.kind) : `<span class="tag">…</span>`}<span class="ver">${esc(d.latest)}</span><span class="hide-sm">${plural(d.releases, "release")}</span></span>
     <span class="desc${m ? "" : " wait"}">${m ? esc(m.description || (m.kind === "flywheel" ? "a Flywheel package" : "no description")) : "reading the latest release…"}</span>
@@ -349,7 +355,7 @@ function renderPackage(a, n, v) {
   if (foreign(m0)) return notFlywheel("hz");
   view.innerHTML = `
     <nav class="crumbs hz"><a href="#/">packages</a><span>/</span><a href="#/u/${enc(a)}">${esc(a)}</a><span>/</span><span>${esc(n)}</span></nav>
-    <div class="title hz"><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><span id="pTag">${m0 ? kindTag(m0.kind) + unlistedTag(m0) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div>
+    <div class="title hz"><span id="pIcon">${pkgIcon(m0, n, "lg")}</span><h1 data-addr="${esc(a + "/" + n)}">${addrHtml(a, n)}</h1><span id="pTag">${m0 ? kindTag(m0.kind) + unlistedTag(m0) : ""}</span><span class="ver" id="pVer">${esc(want || "…")}</span></div>
     <p class="lead hz${m0 ? "" : " wait"}" id="pLead">${m0 ? esc(m0.description || "No description.") : "reading the release…"}</p>
     <div class="cols hz">
       <div>
@@ -361,7 +367,7 @@ function renderPackage(a, n, v) {
         <section class="card"><div class="card-h"><span class="title-s">about</span></div><div class="card-b"><dl class="facts" id="pFacts"></dl></div></section>
         <section class="card"><div class="card-h"><span class="title-s">releases</span><span class="grow"></span><span id="pRelN"></span></div><ul class="rels" id="pRels"><li style="padding:6px 9px;color:var(--faint)">…</li></ul></section>
         <section class="card"><div class="card-h"><span class="title-s">artifacts</span></div><div class="card-b" id="pArts"><span style="color:var(--faint)">…</span></div></section>
-        <section class="card" id="pDepsCard" hidden><div class="card-h"><span class="title-s">dependencies</span></div><div class="card-b"><ul class="deps" id="pDeps"></ul></div></section>
+        <section class="card" id="pDepsCard" hidden><div class="card-h"><span class="title-s">dependencies</span><span class="grow"></span><span id="pDepsN"></span></div><div class="card-b"><ul class="deps" id="pDeps"></ul></div></section>
       </aside>
     </div>`;
   const here = location.hash;
@@ -395,13 +401,14 @@ function renderPackage(a, n, v) {
       if (foreign(m)) return notFlywheel("hz in");
       facts(rels, m);
       $("#pTag").innerHTML = kindTag(m.kind) + unlistedTag(m);
+      $("#pIcon").innerHTML = pkgIcon(m, n, "lg");
       $("#pLead").textContent = m.description || (m.unreadable ? "This release's archive couldn't be read." : "No description.");
       $("#pLead").classList.toggle("wait", !m.description);
       fillInstall(m);
       $("#pArts").innerHTML = m.artifacts.length ? m.artifacts.map(x => `<div class="art"><div class="nm"><a href="${esc(artifactUrl(a, n, ver, x.name))}" download>${esc(x.name)}</a><span style="color:var(--dim)">${fmtSize(x.size)}</span></div><span class="sha" data-copy="${esc(x.sha256)}" title="copy SHA-256">sha256 ${esc(x.sha256)}</span></div>`).join("") : "none";
       paintReadme(m);
       if (m.fileList && m.fileList.length) { $("#pFilesCard").hidden = false; $("#pFilesN").textContent = m.fileList.length; $("#pFiles").innerHTML = m.fileList.slice(0, 200).map(f => `<li>${esc(f)}</li>`).join(""); }
-      if (m.dependencies && m.dependencies.length) { $("#pDepsCard").hidden = false; $("#pDeps").innerHTML = m.dependencies.map(x => `<li><span>${esc(x.alias)}${x.dev ? ` <small style="color:var(--faint)">dev</small>` : ""}</span><span class="spec">${esc(x.spec)}</span></li>`).join(""); }
+      if (m.dependencies && m.dependencies.length) { $("#pDepsCard").hidden = false; $("#pDepsN").textContent = m.dependencies.length; $("#pDeps").innerHTML = m.dependencies.map(x => depItem(x, m)).join(""); fillDepIcons(m, still); }
     });
   }).catch(e => fail(e && e.status === 404 ? `${a}.${n}${v ? "=" + v : ""} isn't on ${REGISTRY}.` : `Couldn't read ${a}.${n} from the registry (${e && e.message || "error"}).`));
 }
@@ -420,6 +427,37 @@ function paintReadme(m) {
 }
 FwHighlight.fetch("grammar/flywheel.tmLanguage.json").then(() => { if (readmeShown && $("#pReadme")) paintReadme(readmeShown); }, () => {});
 const b64e = s => btoa(String.fromCharCode(...new TextEncoder().encode(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+// A dependency: its package (linked when it is on this registry) with its icon, then the
+// constraint, and the import name when that differs from the package name.
+const regName = r => String(r || "").replace(/^https?:\/\/(dstbs\.)?/, "").replace(/\/+$/, "");
+const onThisRegistry = (x, m) => regName(x.registry || m.registry || REGISTRY) === REGISTRY;
+function depItem(x, m) {
+  const dev = x.dev ? `<span class="tag">dev</span>` : "";
+  if (x.kind !== "registry") {
+    const what = x.kind === "git" || x.kind === "path" ? `<span class="tag">${x.kind}</span>` : "";
+    return `<li>${pkgIcon(null, x.alias)}<div class="dep-b"><div class="dep-t"><span class="dep-a">${esc(x.alias)}</span>${dev}</div><div class="dep-s">${what}<span class="spec">${esc(x.kind === "git" ? x.url : x.spec)}</span></div></div></li>`;
+  }
+  const here = onThisRegistry(x, m), full = x.author + "." + x.name, addr = addrHtml(x.author, x.name);
+  const name = here ? `<a class="dep-a" href="#/p/${enc(x.author)}/${enc(x.name)}" title="${esc(full)}">${addr}</a>`
+    : `<span class="dep-a" title="${esc(full + " on " + (x.registry || m.registry))}">${addr}</span>`;
+  const where = here ? "" : `<span class="spec">@${esc(x.registry || m.registry)}</span>`;
+  const alias = x.alias !== x.name ? `<span class="spec">import ${esc(x.alias)}</span>` : "";
+  return `<li data-dep="${esc(x.author + "/" + x.name)}">${pkgIcon(null, x.name)}<div class="dep-b"><div class="dep-t">${name}${dev}</div><div class="dep-s"><span class="ver sm">${esc(x.constraint === "*" ? "any" : x.constraint)}</span>${where}${alias}</div></div></li>`;
+}
+// each dependency's icon comes from its own latest release
+function fillDepIcons(m, still) {
+  for (const x of m.dependencies) {
+    if (x.kind !== "registry" || !onThisRegistry(x, m)) continue;
+    const d = DB && DB.dists.find(y => y.author === x.author && y.name === x.name);
+    (d ? Promise.resolve(d.latest) : getReleases(x.author, x.name).then(r => r.latest))
+      .then(v => getMeta(x.author, x.name, v))
+      .then(dm => {
+        if (!still() || !dm.icon) return;
+        $$(`#pDeps li[data-dep="${CSS.escape(x.author + "/" + x.name)}"] .picon`).forEach(el => { el.outerHTML = pkgIcon(dm, x.name); });
+      }, () => {});
+  }
+}
 
 function renderUser(name) {
   const u = DB && DB.users.find(x => x.name.toLowerCase() === name.toLowerCase());

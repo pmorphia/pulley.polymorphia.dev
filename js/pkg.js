@@ -154,7 +154,9 @@ async function inspect(buffer) {
       meta.main = String(p.main || "");
       meta.version = p.version ? String(p.version) : "";
       meta.unlisted = p.unlisted === true; // `unlisted = true`: left out of listings, page still opens by address
-      const deps = (o, dev) => Object.entries(o || {}).map(([alias, spec]) => ({ alias, spec: typeof spec === "string" ? spec : describeSpec(spec), dev }));
+      meta.icon = iconData(files, p.icon);
+      meta.registry = t.registry && t.registry.default ? String(t.registry.default) : ""; // for dependencies without one
+      const deps = (o, dev) => Object.entries(o || {}).map(([alias, spec]) => ({ alias, spec: typeof spec === "string" ? spec : describeSpec(spec), dev, ...depTarget(spec) }));
       meta.dependencies = deps(t.dependencies, false).concat(deps(t["dev-dependencies"], true));
     } catch (e) { /* show what we can */ }
   } else {
@@ -174,6 +176,37 @@ async function inspect(buffer) {
   if (readme) { meta.readmeName = readme; meta.readme = text(readme); }
   meta.fileList = [...files.keys()].sort();
   return meta;
+}
+// `[package] icon`: an image in the package, as a data: URL (at most 128 KB, as Pulley checks)
+const ICON_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml" };
+function iconData(files, name) {
+  if (typeof name !== "string" || !name) return "";
+  const path = name.replace(/\\/g, "/").replace(/^\.\//, ""), type = ICON_TYPES[(path.split(".").pop() || "").toLowerCase()];
+  const data = files.get(path);
+  if (!type || !data || data.length > 128 * 1024) return "";
+  let bin = "";
+  for (let i = 0; i < data.length; i += 0x8000) bin += String.fromCharCode.apply(null, data.subarray(i, i + 0x8000));
+  return `data:${type};base64,${btoa(bin)}`;
+}
+// A registry dependency's package, as Pulley reads it: author.name[@registry|#path][=constraint]
+// or { distribution, version, registry }. No author means polymorphia. Path and git: kind only.
+function depTarget(spec) {
+  if (spec && typeof spec === "object") {
+    if (spec.path) return { kind: "path" };
+    if (spec.git) return { kind: "git", url: String(spec.git) };
+    const t = depTarget(String(spec.distribution || ""));
+    if (t.kind !== "registry") return t;
+    if (spec.version) t.constraint = String(spec.version);
+    if (spec.registry) t.registry = String(spec.registry);
+    return t;
+  }
+  const m = /^\s*([^@#=\s]+)\s*([@#][^=]*)?(?:=?\s*(.*))?$/.exec(String(spec || ""));
+  if (!m) return { kind: "other" };
+  let pkg = m[1].toLowerCase();
+  if (!pkg.includes(".")) pkg = "polymorphia." + pkg;
+  const dot = pkg.indexOf(".");
+  const registry = m[2] ? m[2].trim().replace(/^@/, "") : "";
+  return { kind: "registry", author: pkg.slice(0, dot), name: pkg.slice(dot + 1), registry, constraint: (m[3] || "").trim() || "*" };
 }
 function describeSpec(s) {
   if (!s || typeof s !== "object") return String(s || "");
