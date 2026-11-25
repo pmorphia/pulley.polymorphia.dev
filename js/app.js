@@ -459,7 +459,7 @@ function renderInstall() {
         <section class="card"><div class="card-h"><span class="title-s">pulley.toml</span></div><div class="prose" style="padding:12px 14px"><pre><code>[package]
 name = "app"
 author = "you"
-version = "0.1.0"
+version = "alpha-1"
 
 [dependencies]
 shapes = "author.shapes=^1.2"</code></pre><p style="margin:0;font-size:12px;color:var(--dim)">The full reference is in the <a href="https://github.com/fwlang/pulley#readme" target="_blank" rel="noopener">README</a>.</p></div></section>
