@@ -283,7 +283,7 @@ const pkgIcon = (m, name, cls = "") => m && m.icon
   ? `<img class="picon ${cls}" src="${esc(m.icon)}" alt="" loading="lazy" decoding="async">`
   : `<span class="picon none ${cls}" aria-hidden="true">${esc((name || "?")[0].toUpperCase())}</span>`;
 const addrHtml = (a, n) => `<span class="au">${esc(a)}</span><span class="dot">.</span>${esc(n)}`;
-const installCmd = (a, n) => `pulley add ${a}.${n}`;
+const installCmd = (a, n) => `pulley pull ${a}.${n}`;
 // a distribution whose release was read and has no pulley.toml: not shown, and Pulley refuses it
 const foreign = m => !!m && m.kind !== "flywheel" && !m.unreadable;
 
@@ -488,11 +488,11 @@ function renderInstall() {
           <div><div class="os-tabs" role="group" aria-label="Operating system">${["linux", "macos", "windows"].map(o => `<button type="button" data-os="${o}" aria-pressed="${o === os}">${o === "macos" ? "macOS" : o[0].toUpperCase() + o.slice(1)}</button>`).join("")}</div><div id="prep">${PREP[os].map(cmd).join("")}</div></div></div>
         <div class="step"><h3>Pulley</h3><p>Install it from PyPI. Open a new terminal afterwards.</p>${cmd("pipx install fw-pulley")}</div>
         <div class="step"><h3>Check it</h3><p><code>pulley where</code> shows the Flywheel installation and package directories it found.</p>${cmd("pulley --version")}${cmd("pulley where")}</div>
-        <div class="step"><h3>Use it</h3><p>Start a project and add a package from this registry by its address.</p>${cmd("pulley new app && cd app")}${cmd("pulley add author.package")}${cmd("flywheel run app.fw")}</div>
+        <div class="step"><h3>Use it</h3><p>Start a project and add a package from this registry by its address.</p>${cmd("pulley new app && cd app")}${cmd("pulley pull author.package")}${cmd("flywheel run app.fw")}</div>
       </div>
       <aside>
         <section class="card"><div class="card-h"><span class="title-s">commands</span><span class="grow"></span><span>also <code>ppm</code></span></div><div class="card-b"><table class="cmds">
-          ${[["add <pkg>", "add a dependency and install it"], ["install", "install everything in pulley.toml"], ["remove <name>", "remove a dependency"], ["update", "move to the newest allowed versions"], ["list --tree", "what is installed"], ["info <address>", "releases, sizes and checksums"], ["publish", "publish as author.name=version"], ["login / register", "registry accounts"]].map(([c, d]) => `<tr><td>${esc(c)}</td><td>${esc(d)}</td></tr>`).join("")}
+          ${[["pull <pkg>", "download and install a package"], ["install", "install everything in pulley.toml"], ["remove <name>", "remove a dependency"], ["update", "move to the newest allowed versions"], ["list --tree", "what is installed"], ["info <address>", "releases, sizes and checksums"], ["publish", "publish as author.name=version"], ["login / register", "registry accounts"]].map(([c, d]) => `<tr><td>${esc(c)}</td><td>${esc(d)}</td></tr>`).join("")}
         </table></div></section>
         <section class="card"><div class="card-h"><span class="title-s">pulley.toml</span></div><div class="prose" style="padding:12px 14px"><pre><code>[package]
 name = "app"
